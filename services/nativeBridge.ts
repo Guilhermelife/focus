@@ -15,9 +15,11 @@ declare global {
       checkPermissions: () => string; // Returns JSON string
       requestPermission: (type: string) => boolean;
       showToast: (message: string) => void;
-      blockApp: (packageName: string) => void;
-      unblockApp: (packageName: string) => void;
-    }
+      // Sends the list of currently blocked package names to the native service
+      updateBlockedPackages: (jsonList: string) => void;
+    };
+    // Callback called by Java when a blocked app is detected
+    handleNativeBlock?: (packageName: string, appName: string) => void;
   }
 }
 
@@ -25,6 +27,7 @@ export interface NativeInterface {
   getInstalledApps: () => Promise<MockApp[]>;
   checkPermissions: () => Promise<NativePermissions>;
   requestPermission: (type: keyof NativePermissions) => Promise<boolean>;
+  updateBlockedPackages: (packageNames: string[]) => void;
 }
 
 // Helper to assign random UI properties to real Android apps
@@ -45,11 +48,10 @@ const normalizeAndroidApps = (rawApps: any[]): MockApp[] => {
     const nameLower = app.name.toLowerCase();
     const pkgLower = app.id.toLowerCase();
     
-    if (nameLower.includes('gram') || nameLower.includes('book') || nameLower.includes('twitter') || nameLower.includes('social')) category = 'Social';
+    if (nameLower.includes('gram') || nameLower.includes('book') || nameLower.includes('twitter') || nameLower.includes('social') || nameLower.includes('face')) category = 'Social';
     else if (nameLower.includes('game') || pkgLower.includes('game') || nameLower.includes('crush')) category = 'Game';
     else if (nameLower.includes('tube') || nameLower.includes('flix') || nameLower.includes('video')) category = 'Entertainment';
     else {
-      // If no keyword match, deterministic random based on string length
       category = categories[nameLower.length % categories.length];
     }
 
@@ -57,15 +59,14 @@ const normalizeAndroidApps = (rawApps: any[]): MockApp[] => {
       id: app.id,
       name: app.name,
       category: category,
-      iconColor: colors[index % colors.length], // Assign colors in rotation
-      isBlocked: false // Default state, will be merged with profile later
+      iconColor: colors[index % colors.length],
+      isBlocked: false
     };
   });
 };
 
 const webBridge: NativeInterface = {
   getInstalledApps: async () => {
-    // 1. Try Real Android Interface
     if (window.Android && window.Android.getInstalledApps) {
       try {
         const jsonString = window.Android.getInstalledApps();
@@ -76,14 +77,12 @@ const webBridge: NativeInterface = {
         return MOCK_APPS;
       }
     }
-
-    // 2. Fallback to Web Simulation
+    // Fallback Mock
     await new Promise(r => setTimeout(r, 800));
     return MOCK_APPS;
   },
 
   checkPermissions: async () => {
-    // 1. Try Real Android Interface
     if (window.Android && window.Android.checkPermissions) {
       try {
         const jsonString = window.Android.checkPermissions();
@@ -92,30 +91,29 @@ const webBridge: NativeInterface = {
         console.error("Failed to check permissions from Android", e);
       }
     }
-
-    // 2. Fallback to Web Simulation
     const p = localStorage.getItem('focusGuard_permissions');
     return p ? JSON.parse(p) : { usage: false, overlay: false, accessibility: false };
   },
 
   requestPermission: async (type) => {
-    // 1. Try Real Android Interface
     if (window.Android && window.Android.requestPermission) {
-      // In Android, requestPermission usually triggers an Intent and returns immediately.
       return window.Android.requestPermission(type);
     }
-
-    // 2. Fallback to Web Simulation
     console.log(`Requesting native permission: ${type}`);
-    
     const currentStr = localStorage.getItem('focusGuard_permissions');
     const current = currentStr ? JSON.parse(currentStr) : { usage: false, overlay: false, accessibility: false };
-    
     current[type] = true;
     localStorage.setItem('focusGuard_permissions', JSON.stringify(current));
-    
     await new Promise(r => setTimeout(r, 1000));
     return true;
+  },
+
+  updateBlockedPackages: (packageNames: string[]) => {
+    if (window.Android && window.Android.updateBlockedPackages) {
+      window.Android.updateBlockedPackages(JSON.stringify(packageNames));
+    } else {
+      console.log("Native: Updating blocked packages list", packageNames);
+    }
   }
 };
 

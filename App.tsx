@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Dashboard } from './views/Dashboard';
 import { AppList } from './views/AppList';
@@ -108,6 +107,43 @@ function App() {
       });
     });
   }, [apps, schedule, activeProfileId, isLoading]);
+
+  // CRITICAL: Send blocked list to Android Native Service
+  useEffect(() => {
+    if (isLoading) return;
+
+    if (isBlockingActive) {
+      // Send the list of IDs (package names) that are currently blocked
+      const blockedPackageNames = apps
+        .filter(app => app.isBlocked)
+        .map(app => app.id);
+      nativeBridge.updateBlockedPackages(blockedPackageNames);
+    } else {
+      // Clear the block list in native side
+      nativeBridge.updateBlockedPackages([]);
+    }
+  }, [isBlockingActive, apps, isLoading]);
+
+  // Handle Native Block Event (Called from Java)
+  useEffect(() => {
+    window.handleNativeBlock = (packageName: string, appName: string) => {
+      // Find the app in our list or create a temp one
+      const foundApp = apps.find(a => a.id === packageName) || {
+        id: packageName,
+        name: appName || packageName,
+        category: 'Entertainment',
+        iconColor: 'bg-red-600',
+        isBlocked: true
+      };
+      
+      setAttemptedApp(foundApp);
+      setCurrentView(AppView.LOCKED_OVERLAY);
+    };
+
+    return () => {
+      window.handleNativeBlock = undefined;
+    };
+  }, [apps]);
 
   // Time Check
   useEffect(() => {
