@@ -1,0 +1,5 @@
+{
+  "name": "FocusGuard",
+  "description": "A high-fidelity prototype of an Android app blocker. It simulates the blocking logic, scheduling, and strict mode features to help users focus. Note: As a web app, it simulates the blocking of mock applications.",
+  "requestFramePermissions": []
+}
