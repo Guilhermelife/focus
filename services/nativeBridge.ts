@@ -27,14 +27,50 @@ export interface NativeInterface {
   requestPermission: (type: keyof NativePermissions) => Promise<boolean>;
 }
 
+// Helper to assign random UI properties to real Android apps
+const normalizeAndroidApps = (rawApps: any[]): MockApp[] => {
+  const categories = ['Social', 'Game', 'Entertainment', 'Productivity'] as const;
+  const colors = [
+    'bg-gradient-to-tr from-yellow-400 to-purple-600',
+    'bg-black border border-gray-700',
+    'bg-green-500',
+    'bg-red-600',
+    'bg-blue-500',
+    'bg-gray-800'
+  ];
+
+  return rawApps.map((app, index) => {
+    // Determine category based on keywords or random
+    let category: any = 'Productivity';
+    const nameLower = app.name.toLowerCase();
+    const pkgLower = app.id.toLowerCase();
+    
+    if (nameLower.includes('gram') || nameLower.includes('book') || nameLower.includes('twitter') || nameLower.includes('social')) category = 'Social';
+    else if (nameLower.includes('game') || pkgLower.includes('game') || nameLower.includes('crush')) category = 'Game';
+    else if (nameLower.includes('tube') || nameLower.includes('flix') || nameLower.includes('video')) category = 'Entertainment';
+    else {
+      // If no keyword match, deterministic random based on string length
+      category = categories[nameLower.length % categories.length];
+    }
+
+    return {
+      id: app.id,
+      name: app.name,
+      category: category,
+      iconColor: colors[index % colors.length], // Assign colors in rotation
+      isBlocked: false // Default state, will be merged with profile later
+    };
+  });
+};
+
 const webBridge: NativeInterface = {
   getInstalledApps: async () => {
     // 1. Try Real Android Interface
     if (window.Android && window.Android.getInstalledApps) {
       try {
         const jsonString = window.Android.getInstalledApps();
-        const apps = JSON.parse(jsonString);
-        return apps;
+        const rawApps = JSON.parse(jsonString);
+        return normalizeAndroidApps(rawApps);
       } catch (e) {
         console.error("Failed to parse apps from Android", e);
         return MOCK_APPS;
@@ -66,7 +102,6 @@ const webBridge: NativeInterface = {
     // 1. Try Real Android Interface
     if (window.Android && window.Android.requestPermission) {
       // In Android, requestPermission usually triggers an Intent and returns immediately.
-      // The app resumes later. Here we assume the Android method returns true if intent launched successfully.
       return window.Android.requestPermission(type);
     }
 
